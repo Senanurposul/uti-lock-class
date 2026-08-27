@@ -1,15 +1,45 @@
-
 from sdks.novavision.src.helper.package import PackageHelper
-from components.Package.src.models.PackageModel import PackageModel, PackageConfigs, ConfigExecutor, PackageOutputs, PackageResponse, PackageExecutor, OutputImage
+
+from components.LockClass.src.models.PackageModel import (
+    PackageModel,
+    PackageConfigs,
+    ConfigExecutor,
+    LockClassExecutor,
+    LockClassResponse,
+    LockClassOutputs,
+    OutputDetections,
+)
 
 
-def build_response(context):
-    outputImage = OutputImage(value=context.image)
-    Outputs = PackageOutputs(outputImage=outputImage)
-    packageResponse = PackageResponse(outputs=Outputs)
-    packageExecutor = PackageExecutor(value=packageResponse)
-    executor = ConfigExecutor(value=packageExecutor)
-    packageConfigs = PackageConfigs(executor=executor)
-    package = PackageHelper(packageModel=PackageModel, packageConfigs=packageConfigs)
-    packageModel = package.build_model(context)
-    return packageModel
+def build_response_lock_class(context):
+
+    output_detections = OutputDetections(
+        value=context.output_detections
+    )
+
+    outputs = LockClassOutputs(
+        OutputDetections=output_detections
+    )
+
+    response = LockClassResponse(
+        outputs=outputs
+    )
+
+    executor = LockClassExecutor(
+        value=response
+    )
+
+    config_executor = ConfigExecutor(
+        value=executor
+    )
+
+    package_configs = PackageConfigs(
+        executor=config_executor
+    )
+
+    package = PackageHelper(
+        packageModel=PackageModel,
+        packageConfigs=package_configs,
+    )
+
+    return package.build_model(context)

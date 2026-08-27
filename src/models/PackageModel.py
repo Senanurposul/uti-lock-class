@@ -1,106 +1,163 @@
+from typing import Any, List, Literal, Optional, Union
 
-from pydantic import Field, validator
-from typing import List, Optional, Union, Literal
-from sdks.novavision.src.base.model import Package, Image, Inputs, Configs, Outputs, Response, Request, Output, Input, Config
+from pydantic import Field
 
-
-class InputImage(Input):
-    name: Literal["inputImage"] = "inputImage"
-    value: Union[List[Image], Image]
-    type: str = "object"
-
-    @validator("type", pre=True, always=True)
-    def set_type_based_on_value(cls, value, values):
-        value = values.get('value')
-        if isinstance(value, Image):
-            return "object"
-        elif isinstance(value, list):
-            return "list"
-
-    class Config:
-        title = "Image"
+from sdks.novavision.src.base.model import (
+    Package,
+    Inputs,
+    Outputs,
+    Configs,
+    Response,
+    Request,
+    Output,
+    Input,
+    Config,
+)
 
 
-class OutputImage(Output):
-    name: Literal["outputImage"] = "outputImage"
-    value: Union[List[Image],Image]
-    type: str = "object"
+# ============================================================
+# INPUT
+# ============================================================
 
-    @validator("type", pre=True, always=True)
-    def set_type_based_on_value(cls, value, values):
-        value = values.get('value')
-        if isinstance(value, Image):
-            return "object"
-        elif isinstance(value, list):
-            return "list"
+class InputTrackedDetections(Input):
+    name: Literal["InputTrackedDetections"] = "InputTrackedDetections"
+    value: List
+    type: Literal["list"] = "list"
 
     class Config:
-        title = "Image"
+        title = "Tracked Detections"
 
 
-class KeepSideFalse(Config):
-    name: Literal["False"] = "False"
-    value: Literal[False] = False
-    type: Literal["bool"] = "bool"
-    field: Literal["option"] = "option"
+# ============================================================
+# OUTPUT
+# ============================================================
 
-    class Config:
-        title = "Disable"
-
-
-class KeepSideTrue(Config):
-    name: Literal["True"] = "True"
-    value: Literal[True] = True
-    type: Literal["bool"] = "bool"
-    field: Literal["option"] = "option"
+class OutputDetections(Output):
+    name: Literal["OutputDetections"] = "OutputDetections"
+    value: list
+    type: Literal["list"] = "list"
 
     class Config:
-        title = "Enable"
+        title = "Detections"
 
 
-class KeepSideBBox(Config):
-    """
-        Rotate image without catting off sides.
-    """
-    name: Literal["KeepSide"] = "KeepSide"
-    value: Union[KeepSideTrue, KeepSideFalse]
-    type: Literal["object"] = "object"
-    field: Literal["dropdownlist"] = "dropdownlist"
+# ============================================================
+# CONFIGS
+# ============================================================
 
-    class Config:
-        title = "Keep Sides"
-
-
-class Degree(Config):
-    """
-        Positive angles specify counterclockwise rotation while negative angles indicate clockwise rotation.
-    """
-    name: Literal["Degree"] = "Degree"
-    value: int = Field(ge=-359.0, le=359.0,default=0)
+class MinVotes(Config):
+    name: Literal["MinVotes"] = "MinVotes"
+    value: int = Field(
+        default=3,
+        ge=1
+    )
     type: Literal["number"] = "number"
     field: Literal["textInput"] = "textInput"
-    placeHolder: Literal["[-359, 359]"] = "[-359, 359]"
 
     class Config:
-        title = "Angle"
+        title = "Minimum Votes"
+        json_schema_extra = {
+            "shortDescription":
+                "Minimum number of votes required to lock a class."
+        }
 
 
-class PackageInputs(Inputs):
-    inputImage: InputImage
+class VoteConfidence(Config):
+    name: Literal["VoteConfidence"] = "VoteConfidence"
+    value: float = Field(
+        default=0.5,
+        ge=0.0,
+        le=1.0
+    )
+    type: Literal["number"] = "number"
+    field: Literal["textInput"] = "textInput"
+
+    class Config:
+        title = "Vote Confidence"
+        json_schema_extra = {
+            "shortDescription":
+                "Minimum confidence required for voting."
+        }
 
 
-class PackageConfigs(Configs):
-    degree: Degree
-    drawBBox: KeepSideBBox
+class LeadMargin(Config):
+    name: Literal["LeadMargin"] = "LeadMargin"
+    value: int = Field(
+        default=1,
+        ge=0
+    )
+    type: Literal["number"] = "number"
+    field: Literal["textInput"] = "textInput"
+
+    class Config:
+        title = "Lead Margin"
+        json_schema_extra = {
+            "shortDescription":
+                "Minimum vote difference required to lock a class."
+        }
 
 
-class PackageOutputs(Outputs):
-    outputImage: OutputImage
+class SwitchAfter(Config):
+    name: Literal["SwitchAfter"] = "SwitchAfter"
+    value: int = Field(
+        default=3,
+        ge=1
+    )
+    type: Literal["number"] = "number"
+    field: Literal["textInput"] = "textInput"
+
+    class Config:
+        title = "Switch After"
+        json_schema_extra = {
+            "shortDescription":
+                "Consecutive frames required to switch class."
+        }
 
 
-class PackageRequest(Request):
-    inputs: Optional[PackageInputs]
-    configs: PackageConfigs
+class StateTTL(Config):
+    name: Literal["StateTTL"] = "StateTTL"
+    value: int = Field(
+        default=30,
+        ge=1
+    )
+    type: Literal["number"] = "number"
+    field: Literal["textInput"] = "textInput"
+
+    class Config:
+        title = "State TTL"
+        json_schema_extra = {
+            "shortDescription":
+                "Frames before an inactive tracker state is removed."
+        }
+
+
+# ============================================================
+# PACKAGE INPUT / OUTPUT
+# ============================================================
+
+class LockClassInputs(Inputs):
+    InputTrackedDetections: InputTrackedDetections
+
+
+class LockClassConfigs(Configs):
+    MinVotes: MinVotes
+    VoteConfidence: VoteConfidence
+    LeadMargin: LeadMargin
+    SwitchAfter: SwitchAfter
+    StateTTL: StateTTL
+
+
+class LockClassOutputs(Outputs):
+    OutputDetections: OutputDetections
+
+
+# ============================================================
+# REQUEST / RESPONSE
+# ============================================================
+
+class LockClassRequest(Request):
+    inputs: Optional[LockClassInputs] = None
+    configs: LockClassConfigs
 
     class Config:
         json_schema_extra = {
@@ -108,18 +165,28 @@ class PackageRequest(Request):
         }
 
 
-class PackageResponse(Response):
-    outputs: PackageOutputs
+class LockClassResponse(Response):
+    outputs: LockClassOutputs
 
 
-class PackageExecutor(Config):
-    name: Literal["Package"] = "Package"
-    value: Union[PackageRequest, PackageResponse]
+# ============================================================
+# EXECUTOR MODEL
+# ============================================================
+
+class LockClassExecutor(Config):
+    name: Literal["LockClass"] = "LockClass"
+
+    value: Union[
+        LockClassRequest,
+        LockClassResponse,
+    ]
+
     type: Literal["object"] = "object"
     field: Literal["option"] = "option"
 
     class Config:
-        title = "Package"
+        title = "Lock Class"
+
         json_schema_extra = {
             "target": {
                 "value": 0
@@ -129,16 +196,23 @@ class PackageExecutor(Config):
 
 class ConfigExecutor(Config):
     name: Literal["ConfigExecutor"] = "ConfigExecutor"
-    value: Union[PackageExecutor]
+
+    value: LockClassExecutor
+
     type: Literal["executor"] = "executor"
     field: Literal["dependentDropdownlist"] = "dependentDropdownlist"
 
     class Config:
         title = "Task"
+
         json_schema_extra = {
             "target": "value"
         }
 
+
+# ============================================================
+# PACKAGE
+# ============================================================
 
 class PackageConfigs(Configs):
     executor: ConfigExecutor
@@ -146,5 +220,7 @@ class PackageConfigs(Configs):
 
 class PackageModel(Package):
     configs: PackageConfigs
+
     type: Literal["component"] = "component"
+
     name: Literal["LockClass"] = "LockClass"
