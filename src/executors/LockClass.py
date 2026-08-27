@@ -4,14 +4,12 @@ import copy
 
 from collections import defaultdict
 
-
 sys.path.append(
     os.path.join(
         os.path.dirname(__file__),
         "../../../../",
     )
 )
-
 
 from sdks.novavision.src.base.component import Component
 from sdks.novavision.src.helper.executor import Executor
@@ -282,6 +280,7 @@ class LockClass(Component):
         )
 
         winner_id = sorted_votes[0][0]
+
         winner_votes = sorted_votes[0][1]
 
         if len(sorted_votes) > 1:
@@ -467,7 +466,7 @@ class LockClass(Component):
 
 
         # ----------------------------------------------------
-        # Update locked class
+        # Update lock
         # ----------------------------------------------------
 
         self._update_lock(
@@ -478,19 +477,25 @@ class LockClass(Component):
 
 
         # ----------------------------------------------------
-        # Apply locked class
+        # Create output copy
         # ----------------------------------------------------
 
-        if (
-            state.locked_class_id
-            is not None
-        ):
+        result = copy.deepcopy(
+            detection
+        )
 
-            result = copy.deepcopy(
-                detection
-            )
 
-            if isinstance(result, dict):
+        # ====================================================
+        # DICTIONARY OUTPUT
+        # ====================================================
+
+        if isinstance(result, dict):
+
+            # ------------------------------------------------
+            # Locked
+            # ------------------------------------------------
+
+            if state.locked_class_id is not None:
 
                 result["classId"] = (
                     state.locked_class_id
@@ -500,7 +505,36 @@ class LockClass(Component):
                     state.locked_class_label
                 )
 
+                result["lockedClassId"] = (
+                    state.locked_class_id
+                )
+
+                result["lockedClassLabel"] = (
+                    state.locked_class_label
+                )
+
+                result["isLocked"] = True
+
+            # ------------------------------------------------
+            # Not locked yet
+            # ------------------------------------------------
+
             else:
+
+                result["lockedClassId"] = None
+
+                result["lockedClassLabel"] = None
+
+                result["isLocked"] = False
+
+
+        # ====================================================
+        # OBJECT OUTPUT
+        # ====================================================
+
+        else:
+
+            if state.locked_class_id is not None:
 
                 if hasattr(
                     result,
@@ -520,10 +554,8 @@ class LockClass(Component):
                         state.locked_class_label
                     )
 
-            return result
 
-
-        return detection
+        return result
 
 
     # ========================================================
@@ -607,6 +639,10 @@ class LockClass(Component):
 
             self.frame_index += 1
 
+            # -----------------------------------------------
+            # Get detections
+            # -----------------------------------------------
+
             detections = (
                 self._normalize_detections(
                     self.tracked_detections
@@ -616,6 +652,10 @@ class LockClass(Component):
 
             output_detections = []
 
+
+            # -----------------------------------------------
+            # Process detections
+            # -----------------------------------------------
 
             for detection in detections:
 
@@ -630,8 +670,16 @@ class LockClass(Component):
                 )
 
 
+            # -----------------------------------------------
+            # Cleanup old tracker states
+            # -----------------------------------------------
+
             self._cleanup_states()
 
+
+            # -----------------------------------------------
+            # Save output
+            # -----------------------------------------------
 
             self.output_detections = (
                 output_detections
@@ -648,6 +696,10 @@ class LockClass(Component):
 
             raise
 
+
+        # -----------------------------------------------
+        # Build NovaVision response
+        # -----------------------------------------------
 
         return build_response_lock_class(
             context=self
