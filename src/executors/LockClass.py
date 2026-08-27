@@ -108,13 +108,16 @@ class LockClass(Component):
         )
 
         # ----------------------------------------------------
-        # TRACK STATES
+        # IMPORTANT:
+        # Track state is stored in bootstrap.
+        # This allows state to survive between frames.
         # ----------------------------------------------------
 
-        self.track_states = {}
+        if "track_states" not in self.bootstrap:
+            self.bootstrap["track_states"] = {}
 
-        self.frame_index = 0
-
+        if "frame_index" not in self.bootstrap:
+            self.bootstrap["frame_index"] = 0
 
     # ========================================================
     # CONFIG HELPER
@@ -131,15 +134,17 @@ class LockClass(Component):
 
         return value
 
-
     # ========================================================
     # BOOTSTRAP
     # ========================================================
 
     @staticmethod
     def bootstrap(config: dict) -> dict:
-        return {}
 
+        return {
+            "track_states": {},
+            "frame_index": 0
+        }
 
     # ========================================================
     # VALUE HELPER
@@ -172,7 +177,6 @@ class LockClass(Component):
 
         return default
 
-
     # ========================================================
     # DETECTION FIELDS
     # ========================================================
@@ -187,7 +191,6 @@ class LockClass(Component):
             default=None
         )
 
-
     @classmethod
     def _get_class_id(cls, detection):
 
@@ -198,7 +201,6 @@ class LockClass(Component):
             default=None
         )
 
-
     @classmethod
     def _get_class_label(cls, detection):
 
@@ -208,7 +210,6 @@ class LockClass(Component):
             "class_label",
             default=None
         )
-
 
     @classmethod
     def _get_confidence(cls, detection):
@@ -227,23 +228,19 @@ class LockClass(Component):
 
             return 0.0
 
-
     # ========================================================
     # STATE
     # ========================================================
 
     def _get_state(self, tracker_id):
 
-        if tracker_id not in self.track_states:
+        track_states = self.bootstrap["track_states"]
 
-            self.track_states[
-                tracker_id
-            ] = TrackState()
+        if tracker_id not in track_states:
 
-        return self.track_states[
-            tracker_id
-        ]
+            track_states[tracker_id] = TrackState()
 
+        return track_states[tracker_id]
 
     # ========================================================
     # VOTING
@@ -261,7 +258,6 @@ class LockClass(Component):
             state.votes[
                 class_id
             ] += 1
-
 
     # ========================================================
     # FIND WINNING CLASS
@@ -305,7 +301,6 @@ class LockClass(Component):
 
         return None
 
-
     # ========================================================
     # CLASS LOCKING
     # ========================================================
@@ -339,7 +334,6 @@ class LockClass(Component):
 
             return
 
-
         # ----------------------------------------------------
         # Same class as locked class
         # ----------------------------------------------------
@@ -354,7 +348,6 @@ class LockClass(Component):
             )
 
             return
-
 
         # ----------------------------------------------------
         # Different class
@@ -375,7 +368,6 @@ class LockClass(Component):
 
             state.switch_count = 1
 
-
         # ----------------------------------------------------
         # Switch class
         # ----------------------------------------------------
@@ -395,7 +387,6 @@ class LockClass(Component):
 
             state.switch_class_id = None
             state.switch_count = 0
-
 
     # ========================================================
     # PROCESS DETECTION
@@ -418,7 +409,6 @@ class LockClass(Component):
 
             return detection
 
-
         class_id = self._get_class_id(
             detection
         )
@@ -431,7 +421,6 @@ class LockClass(Component):
             detection
         )
 
-
         # ----------------------------------------------------
         # No class ID
         # ----------------------------------------------------
@@ -439,7 +428,6 @@ class LockClass(Component):
         if class_id is None:
 
             return detection
-
 
         # ----------------------------------------------------
         # Get tracker state
@@ -450,9 +438,8 @@ class LockClass(Component):
         )
 
         state.last_seen_frame = (
-            self.frame_index
+            self.bootstrap["frame_index"]
         )
-
 
         # ----------------------------------------------------
         # Add vote
@@ -464,7 +451,6 @@ class LockClass(Component):
             confidence
         )
 
-
         # ----------------------------------------------------
         # Update lock
         # ----------------------------------------------------
@@ -475,7 +461,6 @@ class LockClass(Component):
             class_label
         )
 
-
         # ----------------------------------------------------
         # Create output copy
         # ----------------------------------------------------
@@ -483,7 +468,6 @@ class LockClass(Component):
         result = copy.deepcopy(
             detection
         )
-
 
         # ====================================================
         # DICTIONARY OUTPUT
@@ -527,7 +511,6 @@ class LockClass(Component):
 
                 result["isLocked"] = False
 
-
         # ====================================================
         # OBJECT OUTPUT
         # ====================================================
@@ -554,9 +537,32 @@ class LockClass(Component):
                         state.locked_class_label
                     )
 
+                if hasattr(
+                    result,
+                    "lockedClassId"
+                ):
+
+                    result.lockedClassId = (
+                        state.locked_class_id
+                    )
+
+                if hasattr(
+                    result,
+                    "lockedClassLabel"
+                ):
+
+                    result.lockedClassLabel = (
+                        state.locked_class_label
+                    )
+
+                if hasattr(
+                    result,
+                    "isLocked"
+                ):
+
+                    result.isLocked = True
 
         return result
-
 
     # ========================================================
     # CLEANUP
@@ -564,14 +570,22 @@ class LockClass(Component):
 
     def _cleanup_states(self):
 
+        track_states = self.bootstrap[
+            "track_states"
+        ]
+
+        frame_index = self.bootstrap[
+            "frame_index"
+        ]
+
         expired = []
 
         for tracker_id, state in (
-            self.track_states.items()
+            track_states.items()
         ):
 
             frames_since_seen = (
-                self.frame_index
+                frame_index
                 - state.last_seen_frame
             )
 
@@ -584,13 +598,11 @@ class LockClass(Component):
                     tracker_id
                 )
 
-
         for tracker_id in expired:
 
-            del self.track_states[
+            del track_states[
                 tracker_id
             ]
-
 
     # ========================================================
     # NORMALIZE INPUT
@@ -605,7 +617,6 @@ class LockClass(Component):
 
             return []
 
-
         if isinstance(
             detections,
             str
@@ -617,7 +628,6 @@ class LockClass(Component):
                 detections
             )
 
-
         if isinstance(
             detections,
             list
@@ -625,9 +635,7 @@ class LockClass(Component):
 
             return detections
 
-
         return [detections]
-
 
     # ========================================================
     # RUN
@@ -637,7 +645,11 @@ class LockClass(Component):
 
         try:
 
-            self.frame_index += 1
+            # ------------------------------------------------
+            # Increment persistent frame counter
+            # ------------------------------------------------
+
+            self.bootstrap["frame_index"] += 1
 
             # -----------------------------------------------
             # Get detections
@@ -649,9 +661,7 @@ class LockClass(Component):
                 )
             )
 
-
             output_detections = []
-
 
             # -----------------------------------------------
             # Process detections
@@ -669,13 +679,11 @@ class LockClass(Component):
                     processed
                 )
 
-
             # -----------------------------------------------
             # Cleanup old tracker states
             # -----------------------------------------------
 
             self._cleanup_states()
-
 
             # -----------------------------------------------
             # Save output
@@ -684,7 +692,6 @@ class LockClass(Component):
             self.output_detections = (
                 output_detections
             )
-
 
         except Exception as e:
 
@@ -695,7 +702,6 @@ class LockClass(Component):
             )
 
             raise
-
 
         # -----------------------------------------------
         # Build NovaVision response
