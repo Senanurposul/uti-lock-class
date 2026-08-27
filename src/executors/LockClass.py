@@ -1,24 +1,13 @@
 import os
 import sys
-import copy
+from typing import Dict, Any
 
-sys.path.append(
-    os.path.join(
-        os.path.dirname(__file__),
-        "../../../../"
-    )
-)
+sys.path.append(os.path.join(os.path.dirname(__file__), "../../../../"))
 
 from sdks.novavision.src.base.component import Component
 from sdks.novavision.src.helper.executor import Executor
-
-from components.LockClass.src.utils.response import (
-    build_response_lock_class
-)
-
-from components.LockClass.src.models.PackageModel import (
-    PackageModel,
-)
+from capsules.LockClass.src.models.PackageModel import PackageModel
+from capsules.LockClass.src.utils.response import build_response
 
 
 class LockClass(Component):
@@ -26,58 +15,17 @@ class LockClass(Component):
     def __init__(self, request, bootstrap):
         super().__init__(request, bootstrap)
 
-        self.request.model = PackageModel(
-            **self.request.data
+        self.request.model = PackageModel(**(self.request.data))
+
+        self.tracked_detections = self.request.get_param(
+            "InputTrackedDetections"
         )
 
-        # ====================================================
-        # INPUT
-        # ====================================================
-
-        self.tracked_detections = (
-            self.request.get_param(
-                "InputTrackedDetections"
-            )
-        )
-
-        # ====================================================
-        # CONFIG
-        # ====================================================
-
-        self.min_votes = int(
-            self.request.get_param(
-                "MinVotes"
-            )
-        )
-
-        self.vote_confidence = float(
-            self.request.get_param(
-                "VoteConfidence"
-            )
-        )
-
-        self.lead_margin = int(
-            self.request.get_param(
-                "LeadMargin"
-            )
-        )
-
-        self.switch_after = int(
-            self.request.get_param(
-                "SwitchAfter"
-            )
-        )
-
-        self.state_ttl = int(
-            self.request.get_param(
-                "StateTTL"
-            )
-        )
-
-
-    # ========================================================
-    # BOOTSTRAP
-    # ========================================================
+        self.minimum_votes = self.request.get_param("MinimumVotes")
+        self.vote_confidence = self.request.get_param("VoteConfidence")
+        self.lead_margin = self.request.get_param("LeadMargin")
+        self.switch_after = self.request.get_param("SwitchAfter")
+        self.state_ttl = self.request.get_param("StateTTL")
 
     @staticmethod
     def bootstrap(config: dict) -> dict:
@@ -86,581 +34,169 @@ class LockClass(Component):
             "frame_index": 0
         }
 
-
-    # ========================================================
-    # GET VALUE
-    # ========================================================
-
-    @staticmethod
-    def get_value(
-        detection,
-        key,
-        default=None
-    ):
-
-        if isinstance(detection, dict):
-            return detection.get(
-                key,
-                default
-            )
-
-        return getattr(
-            detection,
-            key,
-            default
-        )
-
-
-    # ========================================================
-    # TRACKER ID
-    # ========================================================
-
-    def get_tracker_id(self, detection):
-
-        tracker_id = self.get_value(
-            detection,
-            "trackerID"
-        )
-
-        if tracker_id is None:
-            tracker_id = self.get_value(
-                detection,
-                "tracker_id"
-            )
-
-        return tracker_id
-
-
-    # ========================================================
-    # CLASS ID
-    # ========================================================
-
-    def get_class_id(self, detection):
-
-        class_id = self.get_value(
-            detection,
-            "classId"
-        )
-
-        if class_id is None:
-            class_id = self.get_value(
-                detection,
-                "class_id"
-            )
-
-        return class_id
-
-
-    # ========================================================
-    # CLASS LABEL
-    # ========================================================
-
-    def get_class_label(self, detection):
-
-        class_label = self.get_value(
-            detection,
-            "classLabel"
-        )
-
-        if class_label is None:
-            class_label = self.get_value(
-                detection,
-                "class_label"
-            )
-
-        return class_label
-
-
-    # ========================================================
-    # CONFIDENCE
-    # ========================================================
-
-    def get_confidence(self, detection):
-
-        confidence = self.get_value(
-            detection,
-            "confidence",
-            0.0
-        )
-
-        try:
-            return float(confidence)
-
-        except (TypeError, ValueError):
-            return 0.0
-
-
-    # ========================================================
-    # CREATE STATE
-    # ========================================================
-
-    @staticmethod
-    def create_state():
-
+    def create_state(self) -> Dict[str, Any]:
         return {
             "votes": {},
-            "lockedClassId": None,
-            "lockedClassLabel": None,
-            "switchClassId": None,
-            "switchCount": 0,
-            "lastSeenFrame": 0
+            "locked_class_id": None,
+            "locked_class_label": None,
+            "is_locked": False,
+            "vote_count": 0,
+            "last_seen": 0,
+            "switch_count": 0,
         }
 
-
-    # ========================================================
-    # GET STATE
-    # ========================================================
-
-    def get_state(self, tracker_id):
-
-        states = self.bootstrap[
-            "track_states"
-        ]
-
-        if tracker_id not in states:
-
-            states[tracker_id] = (
-                self.create_state()
-            )
-
-        return states[
-            tracker_id
-        ]
-
-
-    # ========================================================
-    # ADD VOTE
-    # ========================================================
-
-    def add_vote(
+    def update_state(
         self,
-        state,
-        class_id,
-        confidence
+        state: Dict[str, Any],
+        detection: Dict[str, Any],
+        frame_index: int
     ):
+        class_id = detection.get("classId")
+        class_label = detection.get("classLabel")
+        confidence = detection.get("confidence", 0)
+
+        state["last_seen"] = frame_index
 
         if confidence < self.vote_confidence:
             return
 
         if class_id not in state["votes"]:
-            state["votes"][class_id] = 0
-
-        state["votes"][class_id] += 1
-
-
-    # ========================================================
-    # FIND WINNER
-    # ========================================================
-
-    def find_winner(self, state):
-
-        votes = state["votes"]
-
-        if not votes:
-            return None
-
-        sorted_votes = sorted(
-            votes.items(),
-            key=lambda item: item[1],
-            reverse=True
-        )
-
-        winner_id = sorted_votes[0][0]
-        winner_votes = sorted_votes[0][1]
-
-        if len(sorted_votes) > 1:
-            second_votes = sorted_votes[1][1]
-        else:
-            second_votes = 0
-
-        margin = (
-            winner_votes
-            - second_votes
-        )
-
-        if (
-            winner_votes >= self.min_votes
-            and margin >= self.lead_margin
-        ):
-            return winner_id
-
-        return None
-
-
-    # ========================================================
-    # UPDATE LOCK
-    # ========================================================
-
-    def update_lock(
-        self,
-        state,
-        class_id,
-        class_label
-    ):
-
-        # ----------------------------------------------------
-        # FIRST LOCK
-        # ----------------------------------------------------
-
-        if state["lockedClassId"] is None:
-
-            winner = self.find_winner(
-                state
-            )
-
-            if winner == class_id:
-
-                state["lockedClassId"] = (
-                    class_id
-                )
-
-                state["lockedClassLabel"] = (
-                    class_label
-                )
-
-            return
-
-
-        # ----------------------------------------------------
-        # SAME CLASS
-        # ----------------------------------------------------
-
-        if (
-            class_id
-            == state["lockedClassId"]
-        ):
-
-            state["lockedClassLabel"] = (
-                class_label
-            )
-
-            state["switchClassId"] = None
-            state["switchCount"] = 0
-
-            return
-
-
-        # ----------------------------------------------------
-        # DIFFERENT CLASS
-        # ----------------------------------------------------
-
-        if (
-            state["switchClassId"]
-            == class_id
-        ):
-
-            state["switchCount"] += 1
-
-        else:
-
-            state["switchClassId"] = (
-                class_id
-            )
-
-            state["switchCount"] = 1
-
-
-        # ----------------------------------------------------
-        # SWITCH
-        # ----------------------------------------------------
-
-        if (
-            state["switchCount"]
-            >= self.switch_after
-        ):
-
-            state["lockedClassId"] = (
-                class_id
-            )
-
-            state["lockedClassLabel"] = (
-                class_label
-            )
-
-            state["switchClassId"] = None
-            state["switchCount"] = 0
-
-            state["votes"] = {
-                class_id: 1
+            state["votes"][class_id] = {
+                "count": 0,
+                "label": class_label
             }
 
+        state["votes"][class_id]["count"] += 1
 
-    # ========================================================
-    # PROCESS DETECTION
-    # ========================================================
+        best_class_id = None
+        best_count = 0
+        second_best_count = 0
+
+        for cid, vote_data in state["votes"].items():
+            count = vote_data["count"]
+
+            if count > best_count:
+                second_best_count = best_count
+                best_count = count
+                best_class_id = cid
+            elif count > second_best_count:
+                second_best_count = count
+
+        state["vote_count"] = best_count
+
+        if best_class_id is None:
+            return
+
+        best_label = state["votes"][best_class_id]["label"]
+
+        if not state["is_locked"]:
+            if (
+                best_count >= self.minimum_votes
+                and (best_count - second_best_count) >= self.lead_margin
+            ):
+                state["locked_class_id"] = best_class_id
+                state["locked_class_label"] = best_label
+                state["is_locked"] = True
+
+        else:
+            if best_class_id != state["locked_class_id"]:
+                if best_count > second_best_count:
+                    state["switch_count"] += 1
+
+                    if state["switch_count"] >= self.switch_after:
+                        state["locked_class_id"] = best_class_id
+                        state["locked_class_label"] = best_label
+                        state["switch_count"] = 0
+            else:
+                state["switch_count"] = 0
 
     def process_detection(
         self,
-        detection
-    ):
+        detection: Dict[str, Any],
+        frame_index: int
+    ) -> Dict[str, Any]:
 
-        tracker_id = self.get_tracker_id(
-            detection
-        )
+        tracker_id = detection.get("trackerID")
 
         if tracker_id is None:
-            return copy.deepcopy(
-                detection
-            )
+            return detection
 
+        states = self.bootstrap["track_states"]
 
-        class_id = self.get_class_id(
-            detection
-        )
+        if tracker_id not in states:
+            states[tracker_id] = self.create_state()
 
-        class_label = self.get_class_label(
-            detection
-        )
+        state = states[tracker_id]
 
-        confidence = self.get_confidence(
-            detection
-        )
-
-
-        if class_id is None:
-            return copy.deepcopy(
-                detection
-            )
-
-
-        # ----------------------------------------------------
-        # GET TRACK STATE
-        # ----------------------------------------------------
-
-        state = self.get_state(
-            tracker_id
-        )
-
-        state["lastSeenFrame"] = (
-            self.bootstrap["frame_index"]
-        )
-
-
-        # ----------------------------------------------------
-        # VOTE
-        # ----------------------------------------------------
-
-        self.add_vote(
+        self.update_state(
             state,
-            class_id,
-            confidence
+            detection,
+            frame_index
         )
 
+        output_detection = detection.copy()
 
-        # ----------------------------------------------------
-        # LOCK / SWITCH
-        # ----------------------------------------------------
+        output_detection["voteCount"] = state["vote_count"]
+        output_detection["frameIndex"] = frame_index
+        output_detection["lockedClassId"] = state["locked_class_id"]
+        output_detection["lockedClassLabel"] = state["locked_class_label"]
+        output_detection["isLocked"] = state["is_locked"]
 
-        self.update_lock(
-            state,
-            class_id,
-            class_label
-        )
+        return output_detection
 
+    def cleanup_states(self, frame_index: int):
 
-        # ----------------------------------------------------
-        # OUTPUT
-        # ----------------------------------------------------
+        states = self.bootstrap["track_states"]
 
-        result = copy.deepcopy(
-            detection
-        )
+        expired_trackers = []
 
+        for tracker_id, state in states.items():
+            if frame_index - state["last_seen"] > self.state_ttl:
+                expired_trackers.append(tracker_id)
 
-        if isinstance(result, dict):
-
-            # Debug information
-            result["voteCount"] = (
-                state["votes"].get(
-                    class_id,
-                    0
-                )
-            )
-
-            result["frameIndex"] = (
-                self.bootstrap[
-                    "frame_index"
-                ]
-            )
-
-            result["lockedClassId"] = (
-                state["lockedClassId"]
-            )
-
-            result["lockedClassLabel"] = (
-                state["lockedClassLabel"]
-            )
-
-            result["isLocked"] = (
-                state["lockedClassId"]
-                is not None
-            )
-
-
-            # ------------------------------------------------
-            # USE LOCKED CLASS
-            # ------------------------------------------------
-
-            if (
-                state["lockedClassId"]
-                is not None
-            ):
-
-                result["classId"] = (
-                    state["lockedClassId"]
-                )
-
-                result["classLabel"] = (
-                    state["lockedClassLabel"]
-                )
-
-
-        return result
-
-
-    # ========================================================
-    # CLEANUP
-    # ========================================================
-
-    def cleanup_states(self):
-
-        current_frame = (
-            self.bootstrap[
-                "frame_index"
-            ]
-        )
-
-        states = self.bootstrap[
-            "track_states"
-        ]
-
-        expired = []
-
-        for tracker_id, state in (
-            states.items()
-        ):
-
-            frame_difference = (
-                current_frame
-                - state["lastSeenFrame"]
-            )
-
-            if (
-                frame_difference
-                > self.state_ttl
-            ):
-
-                expired.append(
-                    tracker_id
-                )
-
-
-        for tracker_id in expired:
-
-            del states[
-                tracker_id
-            ]
-
-
-    # ========================================================
-    # NORMALIZE INPUT
-    # ========================================================
-
-    def normalize_detections(
-        self,
-        detections
-    ):
-
-        if detections is None:
-            return []
-
-        if isinstance(
-            detections,
-            list
-        ):
-            return detections
-
-        return [
-            detections
-        ]
-
-
-    # ========================================================
-    # RUN
-    # ========================================================
+        for tracker_id in expired_trackers:
+            del states[tracker_id]
 
     def run(self):
 
-        # ----------------------------------------------------
-        # INCREMENT FRAME
-        # ----------------------------------------------------
-
-        self.bootstrap[
-            "frame_index"
-        ] += 1
-
-
-        # ----------------------------------------------------
-        # INPUT
-        # ----------------------------------------------------
-
-        detections = (
-            self.normalize_detections(
-                self.tracked_detections
-            )
+        # ---------------------------------------------------------
+        # DEBUG
+        # ---------------------------------------------------------
+        print(
+            "LOCK CLASS DEBUG:",
+            id(self.bootstrap),
+            self.bootstrap.get("frame_index")
         )
 
-
-        # ----------------------------------------------------
-        # PROCESS
-        # ----------------------------------------------------
+        # ---------------------------------------------------------
+        # FRAME INDEX
+        # ---------------------------------------------------------
+        self.bootstrap["frame_index"] += 1
+        frame_index = self.bootstrap["frame_index"]
 
         output_detections = []
 
-        for detection in detections:
+        if self.tracked_detections is None:
+            self.tracked_detections = []
 
-            output = (
-                self.process_detection(
-                    detection
-                )
+        for detection in self.tracked_detections:
+
+            processed_detection = self.process_detection(
+                detection=detection,
+                frame_index=frame_index
             )
 
-            output_detections.append(
-                output
-            )
+            output_detections.append(processed_detection)
 
+        self.cleanup_states(frame_index)
 
-        # ----------------------------------------------------
-        # CLEANUP
-        # ----------------------------------------------------
-
-        self.cleanup_states()
-
-
-        # ----------------------------------------------------
-        # SAVE OUTPUT
-        # ----------------------------------------------------
-
-        self.output_detections = (
-            output_detections
+        package_model = build_response(
+            context=self,
+            output_detections=output_detections
         )
 
+        return package_model
 
-        # ----------------------------------------------------
-        # RESPONSE
-        # ----------------------------------------------------
-
-        return build_response_lock_class(
-            context=self
-        )
-
-
-# ============================================================
-# MAIN
-# ============================================================
 
 if __name__ == "__main__":
-
-    Executor(
-        sys.argv[1]
-    ).run()
+    Executor(sys.argv[1]).run()
