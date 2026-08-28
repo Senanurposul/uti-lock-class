@@ -28,6 +28,21 @@ class InputTrackedDetections(Input):
         title = "Tracked Detections"
 
 
+class VideoIdentifier(Input):
+    name: Literal["VideoIdentifier"] = "VideoIdentifier"
+    value: Optional[Any] = None
+    type: Literal["string"] = "string"
+
+    class Config:
+        title = "Video Identifier"
+        json_schema_extra = {
+            "shortDescription":
+                "Optional stream/video identifier used to isolate tracker "
+                "state across multiple simultaneous video sources. "
+                "Defaults to a single shared stream if left unconnected."
+        }
+
+
 # ============================================================
 # OUTPUT
 # ============================================================
@@ -131,12 +146,50 @@ class StateTTL(Config):
         }
 
 
+class ReattachWindow(Config):
+    name: Literal["ReattachWindow"] = "ReattachWindow"
+    value: int = Field(
+        default=10,
+        ge=0
+    )
+    type: Literal["number"] = "number"
+    field: Literal["textInput"] = "textInput"
+
+    class Config:
+        title = "Reattach Window"
+        json_schema_extra = {
+            "shortDescription":
+                "Maximum number of frames a lost locked track is kept "
+                "in memory for possible reattachment to a new tracker ID."
+        }
+
+
+class ReattachIoU(Config):
+    name: Literal["ReattachIoU"] = "ReattachIoU"
+    value: float = Field(
+        default=0.5,
+        ge=0.0,
+        le=1.0
+    )
+    type: Literal["number"] = "number"
+    field: Literal["textInput"] = "textInput"
+
+    class Config:
+        title = "Reattach IoU"
+        json_schema_extra = {
+            "shortDescription":
+                "Minimum bounding box IoU required to reattach a lost "
+                "locked track to a newly appeared tracker ID."
+        }
+
+
 # ============================================================
 # PACKAGE INPUT / OUTPUT
 # ============================================================
 
 class LockClassInputs(Inputs):
     InputTrackedDetections: InputTrackedDetections
+    VideoIdentifier: Optional[VideoIdentifier] = None
 
 
 class LockClassConfigs(Configs):
@@ -145,6 +198,8 @@ class LockClassConfigs(Configs):
     LeadMargin: LeadMargin
     SwitchAfter: SwitchAfter
     StateTTL: StateTTL
+    ReattachWindow: ReattachWindow
+    ReattachIoU: ReattachIoU
 
 
 class LockClassOutputs(Outputs):
