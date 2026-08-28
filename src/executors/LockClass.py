@@ -203,6 +203,17 @@ class LockClass(Component):
             return None
 
         recovered_state = lost.pop(best_match_id)["state"]
+
+        # ---- GECICI DEBUG LOG (test sonrasi kaldirilacak) ----
+        print(
+            f"REATTACH DEBUG -> eski_tracker_id: {best_match_id} "
+            f"yeni_tracker_id: {new_tracker_id} iou: {best_iou:.3f} "
+            f"locked_class: {recovered_state.get('lockedClassLabel')} "
+            f"frame: {video_state['frame_index']}",
+            flush=True,
+        )
+        # ---- /GECICI DEBUG LOG ----
+
         return recovered_state
 
     # --------------------------------------------------------
