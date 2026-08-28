@@ -359,10 +359,21 @@ class LockClass(Component):
         lost = video_state["lost"]
         current_frame = video_state["frame_index"]
 
+        # Gercek tracker'lar (ByteTrack vb.) bazen tek bir karede
+        # nesneyi algilayamayabilir (motion blur, gecici confidence
+        # dususu) ama ayni tracker_id'yi korumaya devam eder. Bu tek
+        # karelik bosluk gercek bir ID degisimi degildir, bu yuzden
+        # aninda "kayip" sayip gereksiz reattach tetiklemek yerine
+        # kucuk bir tolerans (grace period) taniyoruz. Yalnizca bu
+        # toleransi asan track'ler gercekten "kayip" sayilip
+        # reattachment icin saklanir.
+        MISS_GRACE_FRAMES = 1
+
         disappeared_ids = [
             tracker_id
-            for tracker_id in tracks
+            for tracker_id, state in tracks.items()
             if tracker_id not in seen_tracker_ids
+            and (current_frame - state["lastSeenFrame"]) > MISS_GRACE_FRAMES
         ]
 
         for tracker_id in disappeared_ids:
