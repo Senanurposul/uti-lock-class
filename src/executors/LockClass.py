@@ -161,7 +161,18 @@ class LockClass(Component):
         if tracker_id in tracks:
             return tracks[tracker_id]
 
-        # -------- REATTACHMENT DENEMESI --------
+        lost = video_state["lost"]
+
+        # -------- AYNI ID GERI GELDI: gercek reattachment DEGIL --------
+        # Tracker (ByteTrack vb.) bazen nesneyi birkac kare boyunca
+        # algilayamasa bile kendi ic belleginde ayni tracker_id'yi
+        # koruyabilir. Bu durumda IoU tahminine hic gerek yok --
+        # ID zaten ayni oldugu icin bu %100 ayni nesnedir. Dogrudan
+        # eski state geri yuklenir, REATTACH olarak loglanmaz.
+        if tracker_id in lost:
+            return lost.pop(tracker_id)["state"]
+
+        # -------- REATTACHMENT DENEMESI (gercekten farkli bir ID) --------
         # Bu tracker_id daha once hic gorulmemis. Yakin zamanda
         # kaybolmus (locked) bir track var mi ve IoU esigini
         # geciyor mu diye kontrol edilir.
