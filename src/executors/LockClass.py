@@ -170,7 +170,9 @@ class LockClass(Component):
         # ID zaten ayni oldugu icin bu %100 ayni nesnedir. Dogrudan
         # eski state geri yuklenir, REATTACH olarak loglanmaz.
         if tracker_id in lost:
-            return lost.pop(tracker_id)["state"]
+            recovered_state = lost.pop(tracker_id)["state"]
+            tracks[tracker_id] = recovered_state
+            return recovered_state
 
         # -------- REATTACHMENT DENEMESI (gercekten farkli bir ID) --------
         # Bu tracker_id daha once hic gorulmemis. Yakin zamanda
